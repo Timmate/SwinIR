@@ -59,7 +59,7 @@ def main():
     test_results['psnr_b'] = []
     psnr, ssim, psnr_y, ssim_y, psnr_b = 0, 0, 0, 0, 0
 
-    for idx, path in tqdm.tqdm(enumerate(sorted(glob.glob(os.path.join(folder, '*'))))):
+    for idx, path in tqdm.tqdm(list(enumerate(sorted(glob.glob(os.path.join(folder, '*')))))):
         # read image
         imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
         img_lq = np.transpose(img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]], (2, 0, 1))  # HCW-BGR to CHW-RGB
