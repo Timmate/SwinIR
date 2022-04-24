@@ -6,6 +6,7 @@ from collections import OrderedDict
 import os
 import torch
 import requests
+import tqdm
 
 from models.network_swinir import SwinIR as net
 from utils import util_calculate_psnr_ssim as util
@@ -26,6 +27,7 @@ def main():
                         default='model_zoo/swinir/001_classicalSR_DIV2K_s48w8_SwinIR-M_x2.pth')
     parser.add_argument('--folder_lq', type=str, default=None, help='input low-quality test image folder')
     parser.add_argument('--folder_gt', type=str, default=None, help='input ground-truth test image folder')
+    parser.add_argument('--output_folder', type=str, default=None, help='folder to save output images to')
     parser.add_argument('--tile', type=int, default=None, help='Tile size, None for no tile during testing (testing as a whole)')
     parser.add_argument('--tile_overlap', type=int, default=32, help='Overlapping of different tiles')
     args = parser.parse_args()
@@ -47,6 +49,7 @@ def main():
 
     # setup folder and path
     folder, save_dir, border, window_size = setup(args)
+    save_dir = args.output_folder  # use user-provided output folder
     os.makedirs(save_dir, exist_ok=True)
     test_results = OrderedDict()
     test_results['psnr'] = []
@@ -56,7 +59,7 @@ def main():
     test_results['psnr_b'] = []
     psnr, ssim, psnr_y, ssim_y, psnr_b = 0, 0, 0, 0, 0
 
-    for idx, path in enumerate(sorted(glob.glob(os.path.join(folder, '*')))):
+    for idx, path in tqdm.tqdm(enumerate(sorted(glob.glob(os.path.join(folder, '*'))))):
         # read image
         imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
         img_lq = np.transpose(img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]], (2, 0, 1))  # HCW-BGR to CHW-RGB
@@ -103,7 +106,8 @@ def main():
                   'PSNR_B: {:.2f} dB.'.
                   format(idx, imgname, psnr, ssim, psnr_y, ssim_y, psnr_b))
         else:
-            print('Testing {:d} {:20s}'.format(idx, imgname))
+            pass
+            # print('Testing {:d} {:20s}'.format(idx, imgname))
 
     # summarize psnr/ssim
     if img_gt is not None:
