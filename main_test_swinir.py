@@ -12,6 +12,10 @@ from models.network_swinir import SwinIR as net
 from utils import util_calculate_psnr_ssim as util
 
 
+class ImageLoadError(Exception):
+    pass
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', type=str, default='color_dn', help='classical_sr, lightweight_sr, real_sr, '
@@ -65,7 +69,11 @@ def main():
     iterator = tqdm.tqdm(list(iterator)) if args.show_progress else iterator
     for idx, path in iterator:
         # read image
-        imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
+        try:
+            imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
+        except ImageLoadError as e:
+            print(e)
+            continue
         img_lq = np.transpose(img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]], (2, 0, 1))  # HCW-BGR to CHW-RGB
         img_lq = torch.from_numpy(img_lq).float().unsqueeze(0).to(device)  # CHW-RGB to NCHW-RGB
         if img_lq.shape[-1] >= args.img_skip_res:  # for square img, last two dims are same
@@ -234,7 +242,10 @@ def get_image_pair(args, path):
     # 003 real-world image sr (load lq image only)
     elif args.task in ['real_sr']:
         img_gt = None
-        img_lq = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
+        img_lq = cv2.imread(path, cv2.IMREAD_COLOR)
+        if img_lq is None:
+            raise ImageLoadError(f"could not load image '{path}'. Not an image?")
+        img_lq = img_lq.astype(np.float32) / 255.
 
     # 004 grayscale image denoising (load gt image and generate lq image on-the-fly)
     elif args.task in ['gray_dn']:
