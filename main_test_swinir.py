@@ -31,6 +31,7 @@ def main():
     parser.add_argument('--tile', type=int, default=None, help='Tile size, None for no tile during testing (testing as a whole)')
     parser.add_argument('--tile_overlap', type=int, default=32, help='Overlapping of different tiles')
     parser.add_argument('--img_skip_res', type=int, default=180, help='Max width/height of images that are to be upscaled')
+    parser.add_argument('--show_progress', action='store_true', help='Show progress bar via tqdm')
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -60,7 +61,9 @@ def main():
     test_results['psnr_b'] = []
     psnr, ssim, psnr_y, ssim_y, psnr_b = 0, 0, 0, 0, 0
 
-    for idx, path in tqdm.tqdm(list(enumerate(sorted(glob.glob(os.path.join(folder, '*')))))):
+    iterator = enumerate(sorted(glob.glob(os.path.join(folder, '*'))))
+    iterator = tqdm.tqdm(list(iterator)) if args.show_progress else iterator
+    for idx, path in iterator:
         # read image
         imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
         img_lq = np.transpose(img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]], (2, 0, 1))  # HCW-BGR to CHW-RGB
