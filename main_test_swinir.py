@@ -31,7 +31,7 @@ def main():
                         default='model_zoo/swinir/001_classicalSR_DIV2K_s48w8_SwinIR-M_x2.pth')
     parser.add_argument('--folder_lq', type=str, default=None, help='input low-quality test image folder')
     parser.add_argument('--folder_gt', type=str, default=None, help='input ground-truth test image folder')
-    parser.add_argument('--output_folder', type=str, default=None, help='folder to save output images to')
+    parser.add_argument('--output_folder', type=str, default=None, required=True, help='folder to save output images to')
     parser.add_argument('--tile', type=int, default=None, help='Tile size, None for no tile during testing (testing as a whole)')
     parser.add_argument('--tile_overlap', type=int, default=32, help='Overlapping of different tiles')
     parser.add_argument('--img_skip_res', type=int, default=180, help='Max width/height of images that are to be upscaled')
@@ -54,8 +54,8 @@ def main():
     model = model.to(device)
 
     # setup folder and path
-    folder, save_dir, border, window_size = setup(args)
-    save_dir = args.output_folder  # use user-provided output folder
+    input_folder, save_dir, border, window_size = setup(args)
+    save_dir = args.output_folder  # use user-provided output folder TODO: make sure this param is not None
     os.makedirs(save_dir, exist_ok=True)
     test_results = OrderedDict()
     test_results['psnr'] = []
@@ -65,12 +65,14 @@ def main():
     test_results['psnr_b'] = []
     psnr, ssim, psnr_y, ssim_y, psnr_b = 0, 0, 0, 0, 0
 
-    iterator = enumerate(sorted(glob.glob(os.path.join(folder, '*'))))
+    iterator = enumerate(sorted(glob.glob(os.path.join(input_folder, '*'))))
     iterator = tqdm.tqdm(list(iterator)) if args.show_progress else iterator
+    has_processed_anything = False
     for idx, path in iterator:
         # read image
         try:
             imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
+            has_processed_anything = True
         except ImageLoadError as e:
             print(e)
             continue
@@ -123,18 +125,19 @@ def main():
             pass
             # print('Testing {:d} {:20s}'.format(idx, imgname))
 
-    # summarize psnr/ssim
-    if img_gt is not None:
-        ave_psnr = sum(test_results['psnr']) / len(test_results['psnr'])
-        ave_ssim = sum(test_results['ssim']) / len(test_results['ssim'])
-        print('\n{} \n-- Average PSNR/SSIM(RGB): {:.2f} dB; {:.4f}'.format(save_dir, ave_psnr, ave_ssim))
-        if img_gt.ndim == 3:
-            ave_psnr_y = sum(test_results['psnr_y']) / len(test_results['psnr_y'])
-            ave_ssim_y = sum(test_results['ssim_y']) / len(test_results['ssim_y'])
-            print('-- Average PSNR_Y/SSIM_Y: {:.2f} dB; {:.4f}'.format(ave_psnr_y, ave_ssim_y))
-        if args.task in ['jpeg_car']:
-            ave_psnr_b = sum(test_results['psnr_b']) / len(test_results['psnr_b'])
-            print('-- Average PSNR_B: {:.2f} dB'.format(ave_psnr_b))
+    if has_processed_anything:
+        # summarize psnr/ssim
+        if img_gt is not None:
+            ave_psnr = sum(test_results['psnr']) / len(test_results['psnr'])
+            ave_ssim = sum(test_results['ssim']) / len(test_results['ssim'])
+            print('\n{} \n-- Average PSNR/SSIM(RGB): {:.2f} dB; {:.4f}'.format(save_dir, ave_psnr, ave_ssim))
+            if img_gt.ndim == 3:
+                ave_psnr_y = sum(test_results['psnr_y']) / len(test_results['psnr_y'])
+                ave_ssim_y = sum(test_results['ssim_y']) / len(test_results['ssim_y'])
+                print('-- Average PSNR_Y/SSIM_Y: {:.2f} dB; {:.4f}'.format(ave_psnr_y, ave_ssim_y))
+            if args.task in ['jpeg_car']:
+                ave_psnr_b = sum(test_results['psnr_b']) / len(test_results['psnr_b'])
+                print('-- Average PSNR_B: {:.2f} dB'.format(ave_psnr_b))
 
 
 def define_model(args):
@@ -200,7 +203,8 @@ def setup(args):
     # 001 classical image sr/ 002 lightweight image sr
     if args.task in ['classical_sr', 'lightweight_sr']:
         save_dir = f'results/swinir_{args.task}_x{args.scale}'
-        folder = args.folder_gt
+        # input_dir = args.folder_gt
+        input_dir = args.folder_lq
         border = args.scale
         window_size = 8
 
@@ -209,25 +213,25 @@ def setup(args):
         save_dir = f'results/swinir_{args.task}_x{args.scale}'
         if args.large_model:
             save_dir += '_large'
-        folder = args.folder_lq
+        input_dir = args.folder_lq
         border = 0
         window_size = 8
 
     # 004 grayscale image denoising/ 005 color image denoising
     elif args.task in ['gray_dn', 'color_dn']:
         save_dir = f'results/swinir_{args.task}_noise{args.noise}'
-        folder = args.folder_gt
+        input_dir = args.folder_gt
         border = 0
         window_size = 8
 
     # 006 JPEG compression artifact reduction
     elif args.task in ['jpeg_car']:
         save_dir = f'results/swinir_{args.task}_jpeg{args.jpeg}'
-        folder = args.folder_gt
+        input_dir = args.folder_gt
         border = 0
         window_size = 7
 
-    return folder, save_dir, border, window_size
+    return input_dir, save_dir, border, window_size
 
 
 def get_image_pair(args, path):
@@ -235,9 +239,11 @@ def get_image_pair(args, path):
 
     # 001 classical image sr/ 002 lightweight image sr (load lq-gt image pairs)
     if args.task in ['classical_sr', 'lightweight_sr']:
-        img_gt = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
-        img_lq = cv2.imread(f'{args.folder_lq}/{imgname}x{args.scale}{imgext}', cv2.IMREAD_COLOR).astype(
-            np.float32) / 255.
+        # img_gt = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
+        # img_lq = cv2.imread(f'{args.folder_lq}/{imgname}x{args.scale}{imgext}', cv2.IMREAD_COLOR).astype(
+        #     np.float32) / 255.
+        img_gt = None
+        img_lq = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
 
     # 003 real-world image sr (load lq image only)
     elif args.task in ['real_sr']:
