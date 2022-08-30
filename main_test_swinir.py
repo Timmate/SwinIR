@@ -36,9 +36,21 @@ def main():
     parser.add_argument('--tile_overlap', type=int, default=32, help='Overlapping of different tiles')
     parser.add_argument('--img_skip_res', type=int, default=180, help='Max width/height of images that are to be upscaled')
     parser.add_argument('--show_progress', action='store_true', help='Show progress bar via tqdm')
+    parser.add_argument('--gpu_ix', type=int, required=False, help='Index of the GPU to use')
     args = parser.parse_args()
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if torch.cuda.is_available():
+        if args.gpu_ix is None:
+            raise Exception('cuda is available, so GPU ix must be provided')
+        else:
+            if args.gpu_ix < 0 or args.gpu_ix > torch.cuda.device_count() - 1:
+                raise Exception(f'invalid GPU ix: GPU ix must be in range [0, {torch.cuda.device_count() - 1}]')
+            device = torch.device(f'cuda:{args.gpu_ix}')
+            print(f"Running on GPU '{torch.cuda.get_device_name(device)}'.")
+    else:
+        print('Running on CPU.')
+        device = torch.device('cpu')
+
     # set up model
     if os.path.exists(args.model_path):
         print(f'loading model from {args.model_path}')
