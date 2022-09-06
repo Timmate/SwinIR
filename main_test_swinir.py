@@ -34,7 +34,7 @@ def main():
     parser.add_argument('--output_folder', type=str, default=None, required=True, help='folder to save output images to')
     parser.add_argument('--tile', type=int, default=None, help='Tile size, None for no tile during testing (testing as a whole)')
     parser.add_argument('--tile_overlap', type=int, default=32, help='Overlapping of different tiles')
-    parser.add_argument('--img_skip_res', type=int, default=180, help='Max width/height of images that are to be upscaled')
+    parser.add_argument('--img_skip_res', type=int, help='Max width/height of images that are to be upscaled')
     parser.add_argument('--show_progress', action='store_true', help='Show progress bar via tqdm')
     parser.add_argument('--gpu_ix', type=int, required=False, help='Index of the GPU to use')
     args = parser.parse_args()
@@ -90,8 +90,16 @@ def main():
             continue
         img_lq = np.transpose(img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]], (2, 0, 1))  # HCW-BGR to CHW-RGB
         img_lq = torch.from_numpy(img_lq).float().unsqueeze(0).to(device)  # CHW-RGB to NCHW-RGB
-        if img_lq.shape[-1] >= args.img_skip_res:  # for square img, last two dims are same
-            continue
+        
+        if args.img_skip_res is not None:
+            if img_lq.shape[-2] == img_lq.shape[-1]:  # for square img, last two dims must be same
+                if img_lq.shape[-1] >= args.img_skip_res:  
+                    continue
+            else:
+                raise Exception('non-square img, do not know if should skip it or not')
+
+#         if img_lq.shape[-1] >= args.img_skip_res:  # for square img, last two dims are same
+#             continue
 
         # inference
         with torch.no_grad():
