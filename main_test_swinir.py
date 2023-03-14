@@ -1,3 +1,4 @@
+from pathlib import Path
 import argparse
 import cv2
 import glob
@@ -81,6 +82,14 @@ def main():
     iterator = tqdm.tqdm(list(iterator)) if args.show_progress else iterator
     has_processed_anything = False
     for idx, path in iterator:
+        output_img_path = Path(args.output_folder) / Path(path).name.replace('.png', '_SwinIR.png').replace('.jpg', '_SwinIR.png')
+        if output_img_path.exists():
+            # print('would skip ' + Path(path).name)
+            continue
+        # else:
+        #     print('would process ' + Path(path).name)
+        #     continue
+                           
         # read image
         try:
             imgname, img_lq, img_gt = get_image_pair(args, path)  # image to HWC-BGR, float32
@@ -90,16 +99,12 @@ def main():
             continue
         img_lq = np.transpose(img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]], (2, 0, 1))  # HCW-BGR to CHW-RGB
         img_lq = torch.from_numpy(img_lq).float().unsqueeze(0).to(device)  # CHW-RGB to NCHW-RGB
-        
         if args.img_skip_res is not None:
-            if img_lq.shape[-2] == img_lq.shape[-1]:  # for square img, last two dims must be same
-                if img_lq.shape[-1] >= args.img_skip_res:  
+            if img_lq.shape[-2] == img_lq.shape[-1]:
+                if img_lq.shape[-1] >= args.img_skip_res:  # for square img, last two dims are same
                     continue
             else:
                 raise Exception('non-square img, do not know if should skip it or not')
-
-#         if img_lq.shape[-1] >= args.img_skip_res:  # for square img, last two dims are same
-#             continue
 
         # inference
         with torch.no_grad():
